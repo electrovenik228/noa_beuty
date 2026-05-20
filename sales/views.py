@@ -6,12 +6,72 @@ from django.views.decorators.csrf import csrf_exempt
 
 from .models import Sale, SaleItem, PaymentMethod, PrintQueue
 from products.models import Perfume, BottleType, CosmeticProduct
+from inventory.models import PerfumeStock, BottleStock, CosmeticStock
 from inventory.services import apply_sale_item_to_stocks
 
-from django.http import FileResponse, Http404, JsonResponse
-import os
+from django.http import JsonResponse
 
-import requests
+
+def get_sales_stock_payload():
+    perfume_stocks = {
+        stock.perfume_id: stock
+        for stock in PerfumeStock.objects.select_related("perfume").all()
+    }
+    bottle_stocks = {
+        stock.bottle_type_id: stock.stock
+        for stock in BottleStock.objects.all()
+    }
+    cosmetic_stocks = {
+        stock.cosmetic_id: stock.stock
+        for stock in CosmeticStock.objects.all()
+    }
+
+    perfumes = {}
+    for perfume in Perfume.objects.select_related("brand").all():
+        stock = perfume_stocks.get(perfume.id)
+        bottles_left = stock.bottles_left if stock else 0
+        ml_left = stock.ml_left if stock else 0
+        perfumes[perfume.id] = {
+            "price_ml": perfume.price_per_ml,
+            "price_bottle": perfume.full_bottle_price,
+            "bottle_ml": perfume.bottle_volume_ml,
+            "name": f"{perfume.brand} {perfume.name}",
+            "bottles_left": bottles_left,
+            "ml_left": ml_left,
+            "total_ml": bottles_left * perfume.bottle_volume_ml + ml_left,
+        }
+
+    cosmetics = {}
+    for cosmetic in CosmeticProduct.objects.select_related("brand").all():
+        cosmetics[cosmetic.id] = {
+            "price": cosmetic.unit_price,
+            "name": f"{cosmetic.brand} {cosmetic.name}",
+            "stock": cosmetic_stocks.get(cosmetic.id, 0),
+        }
+
+    bottles = {}
+    for bottle in BottleType.objects.all():
+        bottles[bottle.id] = {
+            "price": bottle.price,
+            "volume_ml": bottle.volume_ml,
+            "name": bottle.name,
+            "is_paid": bottle.is_paid,
+            "stock": bottle_stocks.get(bottle.id, 0),
+            "label": (
+                f"{bottle.name} {bottle.volume_ml} мл "
+                f"({'%s сом' % bottle.price if bottle.is_paid else 'бесплатно'})"
+            ),
+        }
+
+    return {
+        "perfumes": perfumes,
+        "cosmetics": cosmetics,
+        "bottles": bottles,
+    }
+
+
+def stock_snapshot(request):
+    return JsonResponse(get_sales_stock_payload())
 
 @csrf_exempt
 def enqueue_print(request, sale_id):
@@ -48,6 +108,16 @@ def sales_today(request):
             "total_today": total_today,
         }
     )
+
+
+def sales_today_summary(request):
+    today = timezone.localdate()
+    sales = Sale.objects.filter(sale_date__date=today)
+    return JsonResponse({
+        "count": sales.count(),
+        "total": sum(sale.total for sale in sales),
+        "latest_id": sales.order_by("-id").values_list("id", flat=True).first(),
+    })
 
 
 
@@ -101,6 +171,8 @@ def sale_create(request):
 
                     price = int(prices[i]) if prices[i] else 0
                     discount_percent = int(item_discounts[i]) if item_discounts[i] else 0
+                    if not 0 <= discount_percent <= 100:
+                        raise ValueError("Скидка на товар должна быть от 0 до 100%")
 
                     # ---- QTY ----
                     if sale_type == "split":
@@ -109,6 +181,83 @@ def sale_create(request):
                         qty = bottles_count
                     else:
                         qty = 1
+
+                    if sale_type == "split":
+                        if not perfume_id or ml <= 0:
+                            raise ValueError("Для распива выберите парфюм и количество мл")
+                        perfume = get_object_or_404(Perfume, id=perfume_id)
+                        stock = (
+                            PerfumeStock.objects.select_for_update()
+                            .filter(perfume_id=perfume_id)
+                            .first()
+                        )
+                        total_ml = (
+                            (stock.bottles_left * perfume.bottle_volume_ml) + stock.ml_left
+                            if stock else 0
+                        )
+                        if total_ml < ml:
+                            raise ValueError(f"Недостаточно остатка для распива: {perfume}")
+                    elif sale_type == "full":
+                        if not perfume_id or bottles_count <= 0:
+                            raise ValueError("Для продажи флакона выберите парфюм и количество")
+                        stock = (
+                            PerfumeStock.objects.select_for_update()
+                            .filter(perfume_id=perfume_id)
+                            .first()
+                        )
+                        if not stock or stock.bottles_left < bottles_count:
+                            raise ValueError("Недостаточно полных флаконов на складе")
+                    elif sale_type == "cosmetic":
+                        if not cosmetic_id or bottles_count <= 0:
+                            raise ValueError("Для косметики выберите товар и количество")
+                        stock = (
+                            CosmeticStock.objects.select_for_update()
+                            .filter(cosmetic_id=cosmetic_id)
+                            .first()
+                        )
+                        if not stock or stock.stock < bottles_count:
+                            raise ValueError("Недостаточно косметики на складе")
+                    elif sale_type == "gift":
+                        if cosmetic_id:
+                            stock = (
+                                CosmeticStock.objects.select_for_update()
+                                .filter(cosmetic_id=cosmetic_id)
+                                .first()
+                            )
+                            if bottles_count <= 0 or not stock or stock.stock < bottles_count:
+                                raise ValueError("Недостаточно подарочной косметики на складе")
+                        elif perfume_id and bottles_count > 0:
+                            stock = (
+                                PerfumeStock.objects.select_for_update()
+                                .filter(perfume_id=perfume_id)
+                                .first()
+                            )
+                            if not stock or stock.bottles_left < bottles_count:
+                                raise ValueError("Недостаточно подарочных флаконов на складе")
+                        elif perfume_id and ml > 0:
+                            perfume = get_object_or_404(Perfume, id=perfume_id)
+                            stock = (
+                                PerfumeStock.objects.select_for_update()
+                                .filter(perfume_id=perfume_id)
+                                .first()
+                            )
+                            total_ml = (
+                                (stock.bottles_left * perfume.bottle_volume_ml) + stock.ml_left
+                                if stock else 0
+                            )
+                            if total_ml < ml:
+                                raise ValueError(f"Недостаточно остатка для подарочного распива: {perfume}")
+                        else:
+                            raise ValueError("Для подарка выберите товар и количество")
+
+                    if sale_type == "split" and bottle_type_id and atomizer_count > 0:
+                        bottle_stock = (
+                            BottleStock.objects.select_for_update()
+                            .filter(bottle_type_id=bottle_type_id)
+                            .first()
+                        )
+                        if not bottle_stock or bottle_stock.stock < atomizer_count:
+                            raise ValueError("Недостаточно атомайзеров на складе")
 
                     # Для подарочных товаров стоимость всегда 0
                     if sale_type == "gift":
@@ -154,6 +303,8 @@ def sale_create(request):
 
                 # ===== СОЗДАНИЕ ЧЕКА =====
                 sale_discount_percent = int(request.POST.get("sale_discount", 0))
+                if not 0 <= sale_discount_percent <= 100:
+                    raise ValueError("Скидка на чек должна быть от 0 до 100%")
 
                 sale = Sale.objects.create(
                     payment_method=payment_method,
@@ -212,6 +363,7 @@ def sale_create(request):
             "bottles": bottles,
             "cosmetics": cosmetics,
             "payment_methods": payment_methods,
+            "stock_payload": get_sales_stock_payload(),
             "error": error,
         }
     )

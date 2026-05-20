@@ -78,7 +78,7 @@ class ExpenseListView(ListView):
 class ExpenseCreateView(CreateView):
     model = Expense
     template_name = "finance/expense_form.html"
-    fields = ["date", "description", "amount"]
+    fields = ["description", "amount"]
     success_url = reverse_lazy("expense_list")
 
     def form_valid(self, form):
@@ -88,7 +88,7 @@ class ExpenseCreateView(CreateView):
 class ExpenseUpdateView(UpdateView):
     model = Expense
     template_name = "finance/expense_form.html"
-    fields = ["date", "description", "amount"]
+    fields = ["description", "amount"]
     success_url = reverse_lazy("expense_list")
 
     def form_valid(self, form):
@@ -118,7 +118,7 @@ class IncomeListView(ListView):
 class IncomeCreateView(CreateView):
     model = Income
     template_name = "finance/income_form.html"
-    fields = ["date", "description", "amount"]
+    fields = ["description", "amount"]
     success_url = reverse_lazy("income_list")
 
     def form_valid(self, form):
@@ -128,7 +128,7 @@ class IncomeCreateView(CreateView):
 class IncomeUpdateView(UpdateView):
     model = Income
     template_name = "finance/income_form.html"
-    fields = ["date", "description", "amount"]
+    fields = ["description", "amount"]
     success_url = reverse_lazy("income_list")
 
     def form_valid(self, form):

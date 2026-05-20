@@ -7,33 +7,73 @@
     <p class="text-muted mb-0">Заполните форму для {% if object %}изменения{% else %}добавления{% endif %} расхода</p>
 {% endblock %}
 
+{% block extra_head %}
+    <style>
+        .compact-form {
+            max-width: 720px;
+        }
+        .form-panel {
+            background: #f8f9fa;
+            border: 1px solid #e0e0e0;
+            border-radius: 12px;
+            padding: 20px;
+        }
+        .form-panel input,
+        .form-panel textarea,
+        .form-panel select {
+            width: 100%;
+            padding: 10px 12px;
+            border: 1px solid #d0d0d0;
+            border-radius: 6px;
+        }
+        .form-panel input:focus,
+        .form-panel textarea:focus,
+        .form-panel select:focus {
+            outline: none;
+            border-color: #4a90e2;
+            box-shadow: 0 0 0 3px rgba(74, 144, 226, 0.1);
+        }
+        .form-help {
+            color: #6b7280;
+            font-size: 0.88rem;
+            margin-top: 4px;
+        }
+        .form-actions {
+            display: flex;
+            gap: 10px;
+            flex-wrap: wrap;
+            margin-top: 18px;
+        }
+    </style>
+{% endblock %}
+
 {% block content %}
-    <form method="post">
+    <form method="post" class="compact-form">
         {% csrf_token %}
-        <div class="mb-3">
-            <label for="{{ form.date.id_for_label }}" class="form-label">Дата *</label>
-            {{ form.date }}
-            {% if form.date.errors %}
-                <div class="text-danger small">{{ form.date.errors }}</div>
-            {% endif %}
-        </div>
-        <div class="mb-3">
-            <label for="{{ form.description.id_for_label }}" class="form-label">Описание *</label>
-            {{ form.description }}
-            {% if form.description.errors %}
-                <div class="text-danger small">{{ form.description.errors }}</div>
-            {% endif %}
-        </div>
-        <div class="mb-3">
-            <label for="{{ form.amount.id_for_label }}" class="form-label">Сумма (сом) *</label>
-            {{ form.amount }}
-            {% if form.amount.errors %}
-                <div class="text-danger small">{{ form.amount.errors }}</div>
-            {% endif %}
-        </div>
-        <div class="d-flex gap-2">
-            <button type="submit" class="btn btn-primary">Сохранить</button>
-            <a href="{% url 'expense_list' %}" class="btn btn-outline-secondary">Отмена</a>
+        <div class="form-panel">
+            <div class="alert alert-light border mb-3">
+                Дата расхода будет установлена автоматически при сохранении.
+            </div>
+            <div class="mb-3">
+                <label for="{{ form.description.id_for_label }}" class="form-label fw-semibold">Описание *</label>
+                {{ form.description }}
+                <div class="form-help">Например: аренда, закупка, доставка.</div>
+                {% if form.description.errors %}
+                    <div class="text-danger small mt-1">{{ form.description.errors }}</div>
+                {% endif %}
+            </div>
+            <div class="mb-3">
+                <label for="{{ form.amount.id_for_label }}" class="form-label fw-semibold">Сумма (сом) *</label>
+                {{ form.amount }}
+                <div class="form-help">Введите сумму без пробелов и символа валюты.</div>
+                {% if form.amount.errors %}
+                    <div class="text-danger small mt-1">{{ form.amount.errors }}</div>
+                {% endif %}
+            </div>
+            <div class="form-actions">
+                <button type="submit" class="btn btn-primary">Сохранить</button>
+                <a href="{% url 'expense_list' %}" class="btn btn-outline-secondary">Отмена</a>
+            </div>
         </div>
     </form>
 {% endblock %}
