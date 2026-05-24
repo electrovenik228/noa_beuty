@@ -38,6 +38,7 @@ INSTALLED_APPS = [
 MIDDLEWARE = [
     'django.middleware.security.SecurityMiddleware',
     'django.contrib.sessions.middleware.SessionMiddleware',
+    'core.middleware.AdminGateMiddleware',
     'django.middleware.common.CommonMiddleware',
     'django.middleware.csrf.CsrfViewMiddleware',
     'django.contrib.auth.middleware.AuthenticationMiddleware',
@@ -46,6 +47,9 @@ MIDDLEWARE = [
 ]
 
 ROOT_URLCONF = 'config.urls'
+
+ADMIN_GATE_PASSWORD = config('ADMIN_GATE_PASSWORD', default='admin')
+ADMIN_GATE_TIMEOUT_SECONDS = config('ADMIN_GATE_TIMEOUT_SECONDS', default=300, cast=int)
 
 TEMPLATES = [
     {
@@ -112,4 +116,3 @@ X_FRAME_OPTIONS = 'DENY'
 
 # CSRF trusted origins (можно переопределить в production.py)
 CSRF_TRUSTED_ORIGINS = ['http://77.95.206.95', 'http://77.95.206.95:8000']
-
