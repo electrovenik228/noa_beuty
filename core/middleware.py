@@ -15,7 +15,7 @@ class AdminGateMiddleware:
     def __call__(self, request):
         if request.path.startswith("/admin/"):
             if request.path.startswith("/admin/logout/"):
-                request.session.pop("admin_gate_until", None)
+                request.session.pop("admin_gate_grace_until", None)
             elif not self._has_admin_gate_access(request):
                 query = urlencode({"next": request.get_full_path()})
                 return redirect(f"{reverse('admin_gate')}?{query}")
@@ -24,13 +24,12 @@ class AdminGateMiddleware:
 
     def _has_admin_gate_access(self, request):
         try:
-            gate_until = float(request.session.get("admin_gate_until", 0))
+            gate_until = float(request.session.get("admin_gate_grace_until", 0))
         except (TypeError, ValueError):
             gate_until = 0
 
         if gate_until <= time.time():
-            request.session.pop("admin_gate_until", None)
+            request.session.pop("admin_gate_grace_until", None)
             return False
 
-        request.session["admin_gate_until"] = time.time() + settings.ADMIN_GATE_TIMEOUT_SECONDS
         return True

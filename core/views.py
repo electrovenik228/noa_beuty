@@ -17,7 +17,7 @@ def admin_gate(request):
     if request.method == "POST":
         password = request.POST.get("password", "")
         if password == settings.ADMIN_GATE_PASSWORD:
-            request.session["admin_gate_until"] = time.time() + settings.ADMIN_GATE_TIMEOUT_SECONDS
+            request.session["admin_gate_grace_until"] = time.time() + settings.ADMIN_GATE_GRACE_SECONDS
             return redirect(next_url)
         error = "Неверный пароль"
 
@@ -27,6 +27,6 @@ def admin_gate(request):
         {
             "next": next_url,
             "error": error,
-            "timeout_minutes": max(1, settings.ADMIN_GATE_TIMEOUT_SECONDS // 60),
+            "grace_seconds": settings.ADMIN_GATE_GRACE_SECONDS,
         },
     )
