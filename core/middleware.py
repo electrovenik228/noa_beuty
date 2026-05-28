@@ -9,16 +9,18 @@ from django.urls import reverse
 class AdminGateMiddleware:
     """Adds a lightweight shared-computer password gate before Django admin."""
 
+    admin_gate_path = "/admin/"
+
     def __init__(self, get_response):
         self.get_response = get_response
 
     def __call__(self, request):
-        if request.path.startswith("/admin/"):
-            if request.path.startswith("/admin/logout/"):
-                request.session.pop("admin_gate_grace_until", None)
-            elif not self._has_admin_gate_access(request):
-                query = urlencode({"next": request.get_full_path()})
-                return redirect(f"{reverse('admin_gate')}?{query}")
+        if request.path == self.admin_gate_path and not self._has_admin_gate_access(request):
+            query = urlencode({"next": request.get_full_path()})
+            return redirect(f"{reverse('admin_gate')}?{query}")
+
+        if request.path.startswith("/admin/logout/"):
+            request.session.pop("admin_gate_grace_until", None)
 
         return self.get_response(request)
 
